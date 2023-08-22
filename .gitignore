@@ -8,7 +8,7 @@ __pycache__/
 
 .caffemodel
 .jpg
-
+.icloud
 # Distribution / packaging
 .Python
 build/

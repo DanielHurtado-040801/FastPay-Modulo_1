@@ -78,6 +78,7 @@ while True:
         if detection[2] > 0.45:
             label = classes[int(detection[1])]
             if label == "car":
+                time.sleep(20)
                 box = detection[3:7] * [width, height, width, height]
                 x_start, y_start, x_end, y_end = map(int, box)
                 cv2.rectangle(frame, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
@@ -87,11 +88,9 @@ while True:
                 # Guardar la foto
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S") #Usar este mismo formato en el modulo 2
                 foto_nombre = f"foto_{timestamp}.jpg"
-                time.sleep(3)
                 cv2.imwrite(foto_nombre, frame)
                 ruta_foto = os.path.abspath(foto_nombre)
                 print(f"Se ha tomado la foto: {foto_nombre}")
-                time.sleep(3)
                 placa = analizar(ruta_foto)
 
                 # URL de la API en Django
@@ -123,16 +122,19 @@ while True:
                 #json_data = json.dumps(data)
                 print(placa.upper(), hora_actual_str)
 
+                #-------VALIDACIÓN!!--------------
+                response = requests.get(url + placa.upper())
 
                 # Realizar la solicitud POST
-                response = requests.post(url,  files=files)
 
                 # Obtener la respuesta de la API
                 if response.status_code == 200:  # Verificar si la solicitud fue exitosa
-                    response_data = response.json()
+                    print("Placa ya ingresada, esperar un momento")
                     # Procesar la respuesta de la API según tus necesidades
                 else:
-                    print('Error en la solicitud POST:', response.status_code)
+                    response2 = requests.post(url,  files=files)
+                    response_data = response2.json()
+                    time.sleep(25)
 
 
     cv2.imshow("Frame", frame)
