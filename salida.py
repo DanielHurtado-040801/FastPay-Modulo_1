@@ -136,7 +136,7 @@ while True:
                         print("No ha realizado el pago, por favor realizar el pago. :()")
                     # Procesar la respuesta de la API según tus necesidades
                 else:
-                    print('Error en la solicitud GET para validar la salida:', response.status_code)
+                    print('Por favor validar la placa:', response.status_code)
 
 
     cv2.imshow("Frame", frame)
