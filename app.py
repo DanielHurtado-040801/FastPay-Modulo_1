@@ -1,4 +1,5 @@
 import io
+import re
 import os
 import cv2
 import time
@@ -45,6 +46,8 @@ API_PLATE_TOKEN = os.getenv("API_PLATE_TOKEN")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+API_KEY_FAST_PAY_API = os.getenv("API_KEY_FAST_PAY_API")
+URL_FAST_PAY_API = os.getenv("URL_FAST_PAY_API")
 
 # Config cloudinary
 cloudinary.config( 
@@ -74,10 +77,16 @@ classes = {
 }
 
 # Class labels
-type_vehicule = {
+vehicle_type = {
     "car": "Carro",
     "motorbike": "Moto"
 }
+
+vehicle_type_int = {
+    "car": 1,
+    "motorbike": 2
+}
+
 
 # Load the model
 net = cv2.dnn.readNetFromCaffe(prototxt, model)
@@ -119,10 +128,13 @@ def analyze_plate(buffer, label):
         headers={'Authorization': f'Token {API_PLATE_TOKEN}'},
         verify=False  # Desactivar la verificación del certificado SSL
     )
-    print(response)
     if response is None:
         logger.error("No se pudo obtener una respuesta del servicio platerecognizer")
         return None
+
+    if response.status_code != 201:
+        logger.error(f"La solicitud falló con el código de estado: {response.status_code}")
+
     data_plate_recognizer = response.json()
     if "results" not in data_plate_recognizer or not data_plate_recognizer["results"]:
         logger.error("El servicio platerecognizer no detectó ninguna placa.")
@@ -135,25 +147,43 @@ def analyze_plate(buffer, label):
     if not plate or len(plate) != 6:
         logger.error(f"La placa {plate} detectada no cumple con el formato esperado (6 caracteres).")
         return None
-    
-    if label == "car":
-        # Validación de formato de la placa
-        if not plate or not plate.isalnum() or len(plate) != 6 or not plate[:3].isalpha() or not plate[3:].isdigit():
-            logger.error(f"La placa {plate} detectada con el tipo de vehiculo {type_vehicule[label]} no cumple con el formato esperado (3 letras seguidas de 3 números).")
-            return None
-    elif label == "motorbike":
-        letras = plate[:3]
-        numeros = plate[3:5]
-        letra_final = plate[5]
 
-        if not letras.isalpha() or not numeros.isdigit() or not letra_final.isalpha():
-            logger.error(f"La placa {plate} detectada con el tipo de vehiculo {type_vehicule[label]} no cumple con el formato esperado (3 letras seguidas de 2 números y una letra).")
-            return None
-    else:
-        logger.error(f"La placa {plate} no corresponde a un carro o una moto")
-        return None    
+    plate_regex = r'^[A-Za-z]{3}\d{3}$' if label == "car" else r'^[A-Za-z]{3}\d{2}[A-Za-z]$'
+    if not re.match(plate_regex, plate):
+        if label == "car":
+                logger.error(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 3 números).")
+                return None
+        elif label == "motorbike":
+            logger.error(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 2 números y una letra).")
+            return None   
     return plate
 
+def create_record(payload):
+    
+    headers = {
+        'accept': 'application/json',
+        'x-api-key': API_KEY_FAST_PAY_API,
+        'Content-Type': 'application/json',
+    }
+
+    try:
+        response = requests.post(URL_FAST_PAY_API, headers=headers, json=payload)
+        response.raise_for_status()  # Esto lanzará una excepción para errores HTTP 400 o más
+        logger.info(f"Solicitud exitosa! con el codigo de estado {response.status_code}")
+        return True
+    except requests.exceptions.HTTPError as errh:
+        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error HTTP: {errh}")
+        return False
+    except requests.exceptions.ConnectionError as errc:
+        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error de conexión: {errc}")
+        return False
+    except requests.exceptions.Timeout as errt:
+        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error de tiempo de espera: {errt}")
+        return False
+    except requests.exceptions.RequestException as err:
+        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error en la solicitud: {err}")
+        return False
+    
 def init():
     # ----------- READ THE VIDEO AND PREPROCESSING -----------
     cap = cv2.VideoCapture(0)
@@ -182,16 +212,18 @@ def init():
                         plate = analyze_plate(buffer, label)
                         if plate:
                             payload = {
-                            "placa": plate,
-                            "ulr_image": url,
-                            "type_vehicule": label,
+                            "plate": plate,
+                            "url_image": url,
+                            "vehicle_type": vehicle_type_int[label],
                             }
                             logger.info(payload)
+                       
+                            create_record(payload)
                 else:
                     print("Error")
                 time.sleep(10)
 
-        cv2.imshow("Frame", frame)
+        #cv2.imshow("Frame", frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
 
