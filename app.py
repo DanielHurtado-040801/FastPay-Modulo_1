@@ -112,14 +112,17 @@ def upload_image(buffer):
         # Obtiene la URL de la imagen subida
         url_imagen = result["secure_url"]
         logger.info("La imagen se ha subido exitosamente a Cloudinary.")
+        print("La imagen se ha subido exitosamente a Cloudinary.")
         return True, url_imagen
     except Exception as e:
         logger.error("Error al subir la imagen a Cloudinary:", str(e))
+        print("Error al subir la imagen a Cloudinary:", str(e))
         return False, None
 
 def analyze_plate(buffer, label):
     regions = ["mx", "us-ca"]  # Cambiar según tu país
     logger.info("La imagen se envio al servicio platerecognizer.")
+    print("La imagen se envio al servicio platerecognizer.")
     files={'upload':buffer.tobytes()}
     response = requests.post(
         'https://api.platerecognizer.com/v1/plate-reader/',
@@ -130,35 +133,45 @@ def analyze_plate(buffer, label):
     )
     if response is None:
         logger.error("No se pudo obtener una respuesta del servicio platerecognizer")
+        print("No se pudo obtener una respuesta del servicio platerecognizer")
         return None
 
     if response.status_code != 201:
         logger.error(f"La solicitud falló con el código de estado: {response.status_code}")
+        print(f"La solicitud falló con el código de estado: {response.status_code}")
 
     data_plate_recognizer = response.json()
     if "results" not in data_plate_recognizer or not data_plate_recognizer["results"]:
         logger.error("El servicio platerecognizer no detectó ninguna placa.")
+        print("El servicio platerecognizer no detectó ninguna placa.")
         return None
 
     plate = data_plate_recognizer["results"][0]["plate"]
     logger.info(f"El servicio platerecognizer detecto la placa: {plate}.")
+    print(f"El servicio platerecognizer detecto la placa: {plate}.")
 
     # Validación del formato de la plate
     if not plate or len(plate) != 6:
         logger.error(f"La placa {plate} detectada no cumple con el formato esperado (6 caracteres).")
+        print(f"La placa {plate} detectada no cumple con el formato esperado (6 caracteres).")
         return None
 
     plate_regex = r'^[A-Za-z]{3}\d{3}$' if label == "car" else r'^[A-Za-z]{3}\d{2}[A-Za-z]$'
     if not re.match(plate_regex, plate):
         if label == "car":
                 logger.error(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 3 números).")
+                print(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 3 números).")
                 return None
         elif label == "motorbike":
             logger.error(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 2 números y una letra).")
+            print(f"La placa {plate} detectada con el tipo de vehiculo {vehicle_type[label]} no cumple con el formato esperado (3 letras seguidas de 2 números y una letra).")
             return None   
     return plate
 
 def create_record(payload):
+
+    logger.info(f"Payload: {payload}")
+    print(f"Payload: {payload}")
     
     headers = {
         'accept': 'application/json',
@@ -168,21 +181,19 @@ def create_record(payload):
 
     try:
         response = requests.post(URL_FAST_PAY_API, headers=headers, json=payload)
-        response.raise_for_status()  # Esto lanzará una excepción para errores HTTP 400 o más
-        logger.info(f"Solicitud exitosa! con el codigo de estado {response.status_code}")
+        response.raise_for_status()  # Esto lanzará una excepción si la respuesta tiene un código de estado de error (por ejemplo, 400 o superior)
+    except requests.exceptions.HTTPError as e:
+        logger.info(f"Solictud fallida al servicio FastPay - error {e.response.content}")
+        print(f"Solictud fallida al servicio FastPay - error {e.response.content}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.info(f"Solictud fallida al servicio FastPay - error {e}")
+        print(f"Solictud fallida al servicio FastPay - error {e}")
+        return False
+    else:
+        logger.info(f"Solictud exitosa al servicio FastPay - Content {response.content}")
+        print(f"Solictud exitosa al servicio FastPay - Content {response.content}")
         return True
-    except requests.exceptions.HTTPError as errh:
-        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error HTTP: {errh}")
-        return False
-    except requests.exceptions.ConnectionError as errc:
-        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error de conexión: {errc}")
-        return False
-    except requests.exceptions.Timeout as errt:
-        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error de tiempo de espera: {errt}")
-        return False
-    except requests.exceptions.RequestException as err:
-        logger.error(f"No se pudo obtener una respuesta del servicio fastpay - Error en la solicitud: {err}")
-        return False
     
 def init():
     # ----------- READ THE VIDEO AND PREPROCESSING -----------
@@ -207,17 +218,20 @@ def init():
             if detection[2] > 0.45:
                 success_capture, buffer, label = capture_plate(width, height, frame, detection)
                 if success_capture:
+                    print("Capture success")
+                    logger.info("Capture success")
                     success_image, url = upload_image(buffer)
                     if success_image:
+                        print("Image success")
+                        logger.info("Image success")
                         plate = analyze_plate(buffer, label)
                         if plate:
                             payload = {
-                            "plate": plate,
-                            "url_image": url,
-                            "vehicle_type": vehicle_type_int[label],
+                                "plate": plate,
+                                "url_image": url,
+                                "vehicle_type": vehicle_type_int[label],
                             }
-                            logger.info(payload)
-                       
+
                             create_record(payload)
                 else:
                     print("Error")
