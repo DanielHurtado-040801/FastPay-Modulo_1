@@ -195,14 +195,18 @@ def init():
         for detection in detections[0][0]:
             if detection[2] > 0.45:
                 success_capture, buffer, label = capture_plate(width, height, frame, detection)
-                if success_capture:
+                if success_capture and (label in ['car', 'motorbike']):
                     print("Capture success")
                     logger.info("Capture success")
                     plate = analyze_plate(buffer, label)
                     if plate:
                         check_payment(plate)
+                    else:
+                        print("Plate Error")
+                        logger.info("Plate Error")
                 else:
-                    print("Error")
+                    print("Capture Error")
+                    logger.info("Capture Error")
                 time.sleep(10)
 
         #cv2.imshow("Frame", frame)
